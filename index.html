@@ -81,17 +81,17 @@
         const FPS = 60;
         const CAR_SIZE = { width: 24, height: 14 };
         const SENSOR_RANGE = 150;
-        const MAP_SCALE = 0.85; // Map scaling factor
+        const MAP_SCALE = 0.85;
 
         // Detection Config
         const CHECKPOINT_RADIUS_START = 50; 
         const CHECKPOINT_RADIUS_NORMAL = 120;
         const TOTAL_LAPS = 3;
 
-        // Car Physics (Boosted acceleration and deceleration)
-        const ACCELERATION = 0.6; // Increased from 0.2 to 0.6 (3x)
+        // Car Physics
+        const ACCELERATION = 0.6; 
         const MAX_SPEED = 9;      
-        const FRICTION = 0.93;    // Increased drag (0.96 -> 0.93) for faster deceleration
+        const FRICTION = 0.93;    
         const TURN_SPEED = 0.08;
 
         const SENSOR_LABELS = {
@@ -237,6 +237,9 @@
           const audioCtxRef = useRef(null);
           const engineOscRef = useRef(null);
           const engineGainRef = useRef(null);
+          const skidOscRef = useRef(null);
+          const skidGainRef = useRef(null);
+          const skidFilterRef = useRef(null); // Ref for skid filter
 
           // Time States
           const [currentTime, setCurrentTime] = useState(0); 
@@ -245,13 +248,14 @@
             currentLapTime: 0, 
             lastLapTime: 0,
             totalTime: 0,
-            lapHistory: [] // Added for lap time list
+            lapHistory: [] 
           });
 
           // Mutable Game Objects
           const cars = useRef([]);
           const requestRef = useRef();
           const startTimeRef = useRef(0);
+          const currentSkidSegmentId = useRef(0); // Track skid mark segments
 
           // --- Audio System ---
           const initAudio = () => {
@@ -312,10 +316,7 @@
 
           const stopEngineSound = () => {
               if (engineOscRef.current) {
-                  try {
-                      engineOscRef.current.stop();
-                      engineOscRef.current.disconnect();
-                  } catch (e) {} 
+                  try { engineOscRef.current.stop(); engineOscRef.current.disconnect(); } catch (e) {} 
                   engineOscRef.current = null;
               }
               if (engineGainRef.current) {
@@ -331,10 +332,72 @@
               }
           };
 
+          // --- Skid Sound (Improved: Screechier using higher frequency and Q) ---
+          const updateSkidSound = (driftIntensity) => {
+              if (!audioCtxRef.current || isMuted) return;
+
+              if (driftIntensity > 0.15) { // Threshold slightly higher
+                  if (!skidOscRef.current) {
+                      const bufferSize = audioCtxRef.current.sampleRate * 2;
+                      const buffer = audioCtxRef.current.createBuffer(1, bufferSize, audioCtxRef.current.sampleRate);
+                      const data = buffer.getChannelData(0);
+                      for (let i = 0; i < bufferSize; i++) {
+                          data[i] = Math.random() * 2 - 1;
+                      }
+
+                      const noise = audioCtxRef.current.createBufferSource();
+                      noise.buffer = buffer;
+                      noise.loop = true;
+                      
+                      const gain = audioCtxRef.current.createGain();
+                      // Screechy filter
+                      const filter = audioCtxRef.current.createBiquadFilter();
+                      filter.type = 'bandpass';
+                      filter.frequency.value = 1200; // Higher pitch
+                      filter.Q.value = 5; // Resonant
+
+                      noise.connect(filter);
+                      filter.connect(gain);
+                      gain.connect(audioCtxRef.current.destination);
+                      
+                      noise.start();
+                      skidOscRef.current = noise;
+                      skidGainRef.current = gain;
+                      skidFilterRef.current = filter;
+                  }
+                  
+                  // Modulation based on drift
+                  const vol = Math.min(driftIntensity * 0.8, 0.15); 
+                  skidGainRef.current.gain.setTargetAtTime(vol, audioCtxRef.current.currentTime, 0.1);
+                  
+                  // Modulate pitch slightly with drift intensity
+                  const pitch = 1200 + driftIntensity * 500;
+                  skidFilterRef.current.frequency.setTargetAtTime(pitch, audioCtxRef.current.currentTime, 0.1);
+
+              } else {
+                  if (skidGainRef.current) {
+                      skidGainRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.1);
+                  }
+              }
+          };
+
+          const stopSkidSound = () => {
+              if (skidOscRef.current) {
+                  try { skidOscRef.current.stop(); skidOscRef.current.disconnect(); } catch (e) {}
+                  skidOscRef.current = null;
+              }
+              if (skidGainRef.current) {
+                  skidGainRef.current.disconnect();
+                  skidGainRef.current = null;
+              }
+          };
+
+
           // Handle Audio State Changes
           useEffect(() => {
               if (isMuted || !isPlaying || gameState !== 'running') {
                   stopEngineSound();
+                  stopSkidSound();
               } else if (isPlaying && gameState === 'running' && !isMuted) {
                   startEngineSound();
               }
@@ -343,7 +406,6 @@
           // --- Helpers ---
           const dist = (x1, y1, x2, y2) => Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 
-          // Scaled Map Helper
           const scalePoint = (p) => ({
               x: (p.x - TRACK_WIDTH / 2) * MAP_SCALE + TRACK_WIDTH / 2,
               y: (p.y - TRACK_HEIGHT / 2) * MAP_SCALE + TRACK_HEIGHT / 2
@@ -421,10 +483,13 @@
 
             // Initialize moveAngle
             if (typeof car.moveAngle === 'undefined') car.moveAngle = car.angle;
+            if (typeof car.skidMarks === 'undefined') car.skidMarks = [];
+            if (typeof car.currentSkidId === 'undefined') car.currentSkidId = 0;
+            if (typeof car.isDrifting === 'undefined') car.isDrifting = false;
 
-            // Physics: Drift
+            // Physics: Drift - More slippery logic
             const speedRatio = Math.abs(car.speed) / MAX_SPEED;
-            const grip = 0.15 + (1.0 - speedRatio) * 0.85;
+            const grip = 0.05 + (1.0 - speedRatio) * 0.9; 
 
             let angleDiff = car.angle - car.moveAngle;
             while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
@@ -436,9 +501,44 @@
             car.speed += inputs.throttle * ACCELERATION;
             car.speed *= FRICTION;
 
-            // Tire Scrub
-            if (Math.abs(angleDiff) > 0.1) {
-                car.speed *= (1 - Math.abs(angleDiff) * 0.05); 
+            // Tire Scrub & Skid Logic
+            const driftIntensity = Math.abs(angleDiff);
+            const driftThreshold = 0.15; // Higher threshold for marks
+            
+            // Detect drift state change
+            const nowDrifting = driftIntensity > driftThreshold && Math.abs(car.speed) > 3;
+            
+            if (nowDrifting) {
+                // If just started drifting, increment segment ID
+                if (!car.isDrifting) {
+                    currentSkidSegmentId.current += 1;
+                    car.currentSkidId = currentSkidSegmentId.current;
+                    car.isDrifting = true;
+                }
+
+                // Scrub speed
+                car.speed *= (1 - driftIntensity * 0.02); 
+                
+                // Add Skid Marks
+                // Offset for rear tires
+                const rearX = car.x - Math.cos(car.angle) * 10;
+                const rearY = car.y - Math.sin(car.angle) * 10;
+                // Left and Right tire offsets
+                const perp = car.angle + Math.PI/2;
+                const lx = rearX + Math.cos(perp) * 6;
+                const ly = rearY + Math.sin(perp) * 6;
+                const rx = rearX - Math.cos(perp) * 6;
+                const ry = rearY - Math.sin(perp) * 6;
+
+                car.skidMarks.push({ lx, ly, rx, ry, alpha: 0.3, segmentId: car.currentSkidId });
+                
+                if (car.skidMarks.length > 300) car.skidMarks.shift();
+            } else {
+                car.isDrifting = false;
+            }
+
+            if (car.id === 'user' && !isMuted) {
+                updateSkidSound(nowDrifting ? driftIntensity : 0);
             }
 
             if (car.speed > MAX_SPEED) car.speed = MAX_SPEED;
@@ -491,7 +591,6 @@
                     car.lapStartTime = now; 
                     
                     if (car.id === 'user') {
-                        // Store lap history in car object (mutable ref)
                         if (!car.lapHistory) car.lapHistory = [];
                         car.lapHistory.push(lapTime);
                     }
@@ -506,6 +605,7 @@
                             setIsPlaying(false);
                             if (car.id === 'user') playWinSound();
                             stopEngineSound();
+                            stopSkidSound();
                         }
                     }
                 }
@@ -639,6 +739,35 @@
             ctx.lineWidth = 90;
             ctx.stroke();
 
+            // Skid Marks (Segmented)
+            cars.current.forEach(car => {
+                if (car.skidMarks && car.skidMarks.length > 1) {
+                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = `rgba(20, 20, 20, 0.3)`; // Darker skid marks
+                    
+                    // We must begin path for each segment to avoid connecting disjoint skids
+                    // Optimization: Group by segmentId could be faster, but simple loop is fine for <300 pts
+                    
+                    for(let i=0; i<car.skidMarks.length-1; i++) {
+                        const p1 = car.skidMarks[i];
+                        const p2 = car.skidMarks[i+1];
+                        
+                        // Only connect if they belong to the same continuous drift segment
+                        if (p1.segmentId === p2.segmentId) {
+                            ctx.beginPath();
+                            ctx.moveTo(p1.lx, p1.ly);
+                            ctx.lineTo(p2.lx, p2.ly);
+                            ctx.stroke();
+
+                            ctx.beginPath();
+                            ctx.moveTo(p1.rx, p1.ry);
+                            ctx.lineTo(p2.rx, p2.ry);
+                            ctx.stroke();
+                        }
+                    }
+                }
+            });
+
             // Center Line
             ctx.strokeStyle = '#64748b';
             ctx.lineWidth = 2;
@@ -681,7 +810,6 @@
                 ctx.restore();
 
                 // 2. Draw Speed Text (Global coords)
-                // Draw directly at car.x, car.y - offset
                 ctx.fillStyle = 'white';
                 ctx.font = 'bold 12px sans-serif'; 
                 ctx.textAlign = 'center';
@@ -720,10 +848,12 @@
               cancelAnimationFrame(requestRef.current);
               draw();
               stopEngineSound(); 
+              stopSkidSound();
             }
             return () => {
                 cancelAnimationFrame(requestRef.current);
                 stopEngineSound();
+                stopSkidSound();
             };
           }, [isPlaying, blocks, gameState]);
 
@@ -758,6 +888,7 @@
                 if (!isMuted) startEngineSound();
             } else {
                 stopEngineSound();
+                stopSkidSound();
             }
             
             setIsPlaying(nextIsPlaying);
@@ -769,9 +900,11 @@
             setGameState('idle');
             setWinner(null);
             stopEngineSound();
+            stopSkidSound();
             startTimeRef.current = 0;
             setCurrentTime(0);
             setUserStats({ laps: 0, currentLapTime: 0, lastLapTime: 0, totalTime: 0, lapHistory: [] });
+            currentSkidSegmentId.current = 0; // Reset skid segment counter
 
             // Initialize cars based on track start position
             const points = TRACK_LAYOUTS[currentTrackIdx].points.map(scalePoint);
@@ -787,10 +920,10 @@
             const spawnY = startPoint.y - dy * 40;
 
             cars.current = [
-                { id: 'user', x: spawnX + px * 20, y: spawnY + py * 20, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#3b82f6', isAI: false, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0, lapHistory: [] },
-                { id: 'ai1', x: spawnX - px * 20, y: spawnY - py * 20, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#ef4444', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
-                { id: 'ai2', x: spawnX - dx * 40 - px * 10, y: spawnY - dy * 40 + py * 10, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#f59e0b', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
-                { id: 'ai3', x: spawnX - dx * 40 + px * 10, y: spawnY - dy * 40 - py * 10, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#8b5cf6', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
+                { id: 'user', x: spawnX + px * 20, y: spawnY + py * 20, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#3b82f6', isAI: false, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0, lapHistory: [], skidMarks: [], isDrifting: false, currentSkidId: 0 },
+                { id: 'ai1', x: spawnX - px * 20, y: spawnY - py * 20, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#ef4444', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0, skidMarks: [], isDrifting: false, currentSkidId: 0 },
+                { id: 'ai2', x: spawnX - dx * 40 - px * 10, y: spawnY - dy * 40 + py * 10, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#f59e0b', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0, skidMarks: [], isDrifting: false, currentSkidId: 0 },
+                { id: 'ai3', x: spawnX - dx * 40 + px * 10, y: spawnY - dy * 40 - py * 10, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#8b5cf6', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0, skidMarks: [], isDrifting: false, currentSkidId: 0 },
             ];
             draw();
           };
