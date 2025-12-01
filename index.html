@@ -91,8 +91,8 @@
         const TOTAL_LAPS = 3;
 
         // Car Physics
-        const ACCELERATION = 0.6; 
-        const MAX_SPEED = 9;      
+        const ACCELERATION = 0.7; // 0.6 -> 0.7로 변경하여 최고 안정 속도를 10으로 맞춤 (물리적 한계 해제)
+        const MAX_SPEED = 10;      // 최고 속도 
         const FRICTION = 0.93;    
         const TURN_SPEED = 0.08;
 
@@ -335,7 +335,7 @@
                   const pitch = 100 + absSpeed * 30; 
                   engineOscRef.current.frequency.setTargetAtTime(pitch, audioCtxRef.current.currentTime, 0.1);
 
-                  // 2. Volume (Gain) Adjustment: Smallest volume at 0 speed, full volume near max speed (9)
+                  // 2. Volume (Gain) Adjustment: Smallest volume at 0 speed, full volume near max speed (10)
                   // Base volume 0.05. Scale it based on speed ratio.
                   // (0.1 + absSpeed / MAX_SPEED * 0.9) to ensure min volume is 10% of base
                   const baseVol = 0.05;
