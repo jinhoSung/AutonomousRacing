@@ -2,21 +2,23 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>자율주행 레이싱 (Autonomous Racing)</title>
     
-    <!-- Tailwind CSS (스타일링) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM (리액트 코어) -->
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    <!-- Babel (JSX 변환기) -->
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #0f172a; color: #f1f5f9; font-family: sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -25,8 +27,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
-        // --- Icon Components (SVG) ---
-        // Lucide 아이콘을 외부 의존성 없이 직접 SVG로 구현하여 깃허브 페이지 호환성 확보
+        // --- Icon Components (Inline SVG) ---
         const Play = ({size=24, className=""}) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         );
@@ -66,6 +67,12 @@
         const MapIcon = ({size=24, className=""}) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
         );
+        const Volume2 = ({size=24, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        );
+        const VolumeX = ({size=24, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+        );
 
 
         // --- Constants & Config ---
@@ -74,19 +81,19 @@
         const FPS = 60;
         const CAR_SIZE = { width: 24, height: 14 };
         const SENSOR_RANGE = 150;
+        const MAP_SCALE = 0.85; // Map scaling factor
 
-        // Detection Radius Config
-        const CHECKPOINT_RADIUS_START = 220; 
+        // Detection Config
+        const CHECKPOINT_RADIUS_START = 50; 
         const CHECKPOINT_RADIUS_NORMAL = 120;
         const TOTAL_LAPS = 3;
 
-        // Car Physics
-        const ACCELERATION = 0.2;
-        const MAX_SPEED = 6;
-        const FRICTION = 0.96;
+        // Car Physics (Boosted acceleration and deceleration)
+        const ACCELERATION = 0.6; // Increased from 0.2 to 0.6 (3x)
+        const MAX_SPEED = 9;      
+        const FRICTION = 0.93;    // Increased drag (0.96 -> 0.93) for faster deceleration
         const TURN_SPEED = 0.08;
 
-        // Sensor Labels for UI
         const SENSOR_LABELS = {
             0: '좌측 센서',
             1: '전방 좌측',
@@ -109,20 +116,19 @@
         const TRACK_LAYOUTS = [
             {
                 id: 'technical',
-                name: '테크니컬 서킷 (기본)',
+                name: '1. 테크니컬 서킷 (기본)',
                 points: [
-                    // Start Line at middle of top straight
                     { x: 350, y: 100 }, 
                     { x: 500, y: 50 }, { x: 700, y: 100 },
                     { x: 750, y: 250 }, { x: 600, y: 350 }, { x: 700, y: 500 }, { x: 500, y: 550 },
                     { x: 300, y: 500 }, { x: 150, y: 450 }, { x: 50, y: 300 }, 
                     { x: 100, y: 100 },
-                    { x: 200, y: 100 } // Loop closer
+                    { x: 200, y: 100 }
                 ]
             },
             {
                 id: 'oval',
-                name: '스피드 오벌 (초급)',
+                name: '2. 스피드 오벌 (초급)',
                 points: [
                     { x: 400, y: 100 },
                     { x: 650, y: 100 }, 
@@ -134,12 +140,84 @@
             },
             {
                 id: 'hardcore',
-                name: '하드코어 8자 (상급)',
+                name: '3. 하드코어 8자 (상급)',
                 points: [
                     { x: 400, y: 100 }, { x: 700, y: 100 },
-                    { x: 700, y: 500 }, { x: 400, y: 300 }, // Cross point
+                    { x: 700, y: 500 }, { x: 400, y: 300 },
                     { x: 100, y: 500 }, { x: 100, y: 300 },
                     { x: 100, y: 100 }
+                ]
+            },
+            {
+                id: 'square',
+                name: '4. 심플 스퀘어 (입문)',
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 700, y: 100 }, { x: 700, y: 500 }, 
+                    { x: 100, y: 500 }, { x: 100, y: 100 }
+                ]
+            },
+            {
+                id: 'pentagon',
+                name: '5. 펜타곤 챌린지 (중급)',
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 500, y: 100 }, { x: 700, y: 300 }, 
+                    { x: 500, y: 500 }, { x: 300, y: 500 }, 
+                    { x: 100, y: 300 }, { x: 300, y: 100 }
+                ]
+            },
+            {
+                id: 'zigzag',
+                name: '6. 지그재그 로드 (상급)',
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 700, y: 100 }, { x: 700, y: 200 }, 
+                    { x: 200, y: 300 }, 
+                    { x: 700, y: 400 }, { x: 700, y: 500 }, 
+                    { x: 100, y: 500 }, { x: 100, y: 100 }
+                ]
+            },
+            {
+                id: 'hourglass',
+                name: '7. 모래시계 (상급)',
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 700, y: 100 }, { x: 500, y: 300 }, 
+                    { x: 700, y: 500 }, { x: 100, y: 500 }, 
+                    { x: 300, y: 300 }, { x: 100, y: 100 }
+                ]
+            },
+            {
+                id: 'slalom',
+                name: '8. 슈퍼 슬라롬 (최상급)',
+                points: [
+                    { x: 400, y: 100 },
+                    { x: 750, y: 100 }, { x: 750, y: 500 },
+                    { x: 600, y: 300 }, { x: 450, y: 500 },
+                    { x: 300, y: 300 }, { x: 150, y: 500 },
+                    { x: 50, y: 500 }, { x: 50, y: 100 }
+                ]
+            },
+            {
+                id: 'grand_tour',
+                name: '9. 그랜드 투어 (초장거리)',
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 750, y: 100 }, { x: 750, y: 550 }, 
+                    { x: 50, y: 550 }, { x: 50, y: 100 }
+                ]
+            },
+            {
+                id: 'star',
+                name: '10. 별 모양 서킷 (이벤트)',
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 500, y: 100 }, { x: 700, y: 250 }, 
+                    { x: 500, y: 400 }, { x: 600, y: 550 }, 
+                    { x: 400, y: 450 }, { x: 200, y: 550 }, 
+                    { x: 300, y: 400 }, { x: 100, y: 250 }, 
+                    { x: 300, y: 100 }
                 ]
             }
         ];
@@ -153,14 +231,21 @@
           const [winner, setWinner] = useState(null);
           const [sensorReadings, setSensorReadings] = useState([0, 0, 0, 0, 0]);
           const [currentTrackIdx, setCurrentTrackIdx] = useState(0);
+          const [isMuted, setIsMuted] = useState(false);
           
+          // Audio Refs
+          const audioCtxRef = useRef(null);
+          const engineOscRef = useRef(null);
+          const engineGainRef = useRef(null);
+
           // Time States
           const [currentTime, setCurrentTime] = useState(0); 
           const [userStats, setUserStats] = useState({ 
             laps: 0, 
             currentLapTime: 0, 
             lastLapTime: 0,
-            totalTime: 0
+            totalTime: 0,
+            lapHistory: [] // Added for lap time list
           });
 
           // Mutable Game Objects
@@ -168,10 +253,103 @@
           const requestRef = useRef();
           const startTimeRef = useRef(0);
 
+          // --- Audio System ---
+          const initAudio = () => {
+              if (!audioCtxRef.current) {
+                  audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+              }
+              if (audioCtxRef.current.state === 'suspended') {
+                  audioCtxRef.current.resume();
+              }
+          };
+
+          const playTone = (freq, type, duration, vol = 0.1) => {
+              if (isMuted || !audioCtxRef.current) return;
+              const osc = audioCtxRef.current.createOscillator();
+              const gain = audioCtxRef.current.createGain();
+              osc.type = type;
+              osc.frequency.setValueAtTime(freq, audioCtxRef.current.currentTime);
+              gain.gain.setValueAtTime(vol, audioCtxRef.current.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioCtxRef.current.currentTime + duration);
+              osc.connect(gain);
+              gain.connect(audioCtxRef.current.destination);
+              osc.start();
+              osc.stop(audioCtxRef.current.currentTime + duration);
+          };
+
+          const playClickSound = () => {
+              initAudio(); 
+              playTone(600, 'sine', 0.1, 0.025);
+          };
+          
+          const playLapSound = () => {
+              if (isMuted || !audioCtxRef.current) return;
+              playTone(880, 'sine', 0.1, 0.05);
+              setTimeout(() => playTone(1760, 'sine', 0.2, 0.05), 100);
+          };
+
+          const playWinSound = () => {
+              if (isMuted || !audioCtxRef.current) return;
+              const notes = [523.25, 659.25, 783.99, 1046.50]; 
+              notes.forEach((note, i) => {
+                  setTimeout(() => playTone(note, 'square', 0.2, 0.05), i * 150);
+              });
+          };
+
+          const startEngineSound = () => {
+              if (isMuted || !audioCtxRef.current || engineOscRef.current) return;
+              const osc = audioCtxRef.current.createOscillator();
+              const gain = audioCtxRef.current.createGain();
+              osc.type = 'sawtooth'; 
+              osc.frequency.value = 100; 
+              gain.gain.value = 0.05; 
+              osc.connect(gain);
+              gain.connect(audioCtxRef.current.destination);
+              osc.start();
+              engineOscRef.current = osc;
+              engineGainRef.current = gain;
+          };
+
+          const stopEngineSound = () => {
+              if (engineOscRef.current) {
+                  try {
+                      engineOscRef.current.stop();
+                      engineOscRef.current.disconnect();
+                  } catch (e) {} 
+                  engineOscRef.current = null;
+              }
+              if (engineGainRef.current) {
+                  engineGainRef.current.disconnect();
+                  engineGainRef.current = null;
+              }
+          };
+
+          const updateEnginePitch = (speed) => {
+              if (engineOscRef.current && !isMuted && audioCtxRef.current) {
+                  const pitch = 100 + Math.abs(speed) * 30; 
+                  engineOscRef.current.frequency.setTargetAtTime(pitch, audioCtxRef.current.currentTime, 0.1);
+              }
+          };
+
+          // Handle Audio State Changes
+          useEffect(() => {
+              if (isMuted || !isPlaying || gameState !== 'running') {
+                  stopEngineSound();
+              } else if (isPlaying && gameState === 'running' && !isMuted) {
+                  startEngineSound();
+              }
+          }, [isMuted, isPlaying, gameState]);
+
           // --- Helpers ---
           const dist = (x1, y1, x2, y2) => Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 
-          const getCurrentTrackPoints = () => TRACK_LAYOUTS[currentTrackIdx].points;
+          // Scaled Map Helper
+          const scalePoint = (p) => ({
+              x: (p.x - TRACK_WIDTH / 2) * MAP_SCALE + TRACK_WIDTH / 2,
+              y: (p.y - TRACK_HEIGHT / 2) * MAP_SCALE + TRACK_HEIGHT / 2
+          });
+
+          const getCurrentTrackPoints = () => TRACK_LAYOUTS[currentTrackIdx].points.map(scalePoint);
 
           const getStartAngle = () => {
               const points = getCurrentTrackPoints();
@@ -241,36 +419,82 @@
                 car.angle += inputs.steer * TURN_SPEED * (car.speed > 0 ? 1 : -1);
             }
 
+            // Initialize moveAngle
+            if (typeof car.moveAngle === 'undefined') car.moveAngle = car.angle;
+
+            // Physics: Drift
+            const speedRatio = Math.abs(car.speed) / MAX_SPEED;
+            const grip = 0.15 + (1.0 - speedRatio) * 0.85;
+
+            let angleDiff = car.angle - car.moveAngle;
+            while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
+            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+            car.moveAngle += angleDiff * grip;
+
             // Acceleration & Friction
             car.speed += inputs.throttle * ACCELERATION;
             car.speed *= FRICTION;
 
+            // Tire Scrub
+            if (Math.abs(angleDiff) > 0.1) {
+                car.speed *= (1 - Math.abs(angleDiff) * 0.05); 
+            }
+
             if (car.speed > MAX_SPEED) car.speed = MAX_SPEED;
             if (car.speed < -MAX_SPEED / 2) car.speed = -MAX_SPEED / 2;
 
-            car.x += Math.cos(car.angle) * car.speed;
-            car.y += Math.sin(car.angle) * car.speed;
+            // Move
+            car.x += Math.cos(car.moveAngle) * car.speed;
+            car.y += Math.sin(car.moveAngle) * car.speed;
 
             if (isOffTrack(car.x, car.y)) {
                 car.speed *= 0.5; 
             }
 
-            // Checkpoint & Lap Logic
+            // Checkpoint
             const points = getCurrentTrackPoints();
             const nextCpIdx = (car.lastCP + 1) % points.length;
             const nextCp = points[nextCpIdx];
             
-            const detectionRadius = nextCpIdx === 0 ? CHECKPOINT_RADIUS_START : CHECKPOINT_RADIUS_NORMAL;
+            let isCheckpointReached = false;
 
-            if (dist(car.x, car.y, nextCp.x, nextCp.y) < detectionRadius) {
+            if (nextCpIdx === 0) {
+                // Rectangular detection for Start Line
+                const p0 = points[0];
+                const p1 = points[1]; 
+                const trackAngle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+                const dx = car.x - p0.x;
+                const dy = car.y - p0.y;
+                const localX = dx * Math.cos(-trackAngle) - dy * Math.sin(-trackAngle);
+                const localY = dx * Math.sin(-trackAngle) + dy * Math.cos(-trackAngle);
+                
+                if (Math.abs(localX) < 20 && Math.abs(localY) < 100) {
+                    isCheckpointReached = true;
+                }
+            } else {
+                if (dist(car.x, car.y, nextCp.x, nextCp.y) < CHECKPOINT_RADIUS_NORMAL) {
+                    isCheckpointReached = true;
+                }
+            }
+
+            if (isCheckpointReached) {
                 car.lastCP = nextCpIdx;
                 
                 if (nextCpIdx === 0) {
                     car.laps++;
+                    if (!car.isAI) playLapSound();
+
                     const now = timestamp;
                     const lapTime = (now - car.lapStartTime) / 1000;
                     car.lastLapTime = lapTime;
                     car.lapStartTime = now; 
+                    
+                    if (car.id === 'user') {
+                        // Store lap history in car object (mutable ref)
+                        if (!car.lapHistory) car.lapHistory = [];
+                        car.lapHistory.push(lapTime);
+                    }
 
                     if (car.laps >= TOTAL_LAPS) {
                         car.finished = true;
@@ -280,6 +504,8 @@
                             setWinner(car.id);
                             setGameState('finished');
                             setIsPlaying(false);
+                            if (car.id === 'user') playWinSound();
+                            stopEngineSound();
                         }
                     }
                 }
@@ -356,6 +582,10 @@
             setSensorReadings(readings);
             const userInputs = getUserInputs(userCar, readings);
             updateCarPhysics(userCar, userInputs, timestamp);
+            
+            if (!isMuted && gameState === 'running') {
+                updateEnginePitch(userCar.speed);
+            }
 
             cars.current.slice(1).forEach(car => {
                 const aiInputs = getAIInputs(car);
@@ -366,7 +596,8 @@
                 laps: userCar.laps,
                 currentLapTime: (timestamp - userCar.lapStartTime) / 1000,
                 lastLapTime: userCar.lastLapTime,
-                totalTime: userCar.finished ? userCar.finishTime : currentTotalTime
+                totalTime: userCar.finished ? userCar.finishTime : currentTotalTime,
+                lapHistory: userCar.lapHistory || [] // Sync history for UI
             });
 
             draw();
@@ -435,6 +666,7 @@
 
             // Draw Cars
             cars.current.forEach(car => {
+                // 1. Draw Body & Rays (Rotated context)
                 ctx.save();
                 ctx.translate(car.x, car.y);
                 ctx.rotate(car.angle);
@@ -447,6 +679,17 @@
                 ctx.fillStyle = '#1e293b';
                 ctx.fillRect(2, -5, 6, 10);
                 ctx.restore();
+
+                // 2. Draw Speed Text (Global coords)
+                // Draw directly at car.x, car.y - offset
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 12px sans-serif'; 
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 3;
+                ctx.strokeText(Math.abs(car.speed).toFixed(1), car.x, car.y - 12);
+                ctx.fillText(Math.abs(car.speed).toFixed(1), car.x, car.y - 12);
 
                 if (!car.isAI) {
                     const readings = castRays(car);
@@ -476,8 +719,12 @@
             } else {
               cancelAnimationFrame(requestRef.current);
               draw();
+              stopEngineSound(); 
             }
-            return () => cancelAnimationFrame(requestRef.current);
+            return () => {
+                cancelAnimationFrame(requestRef.current);
+                stopEngineSound();
+            };
           }, [isPlaying, blocks, gameState]);
 
           // Handle Track Change
@@ -489,45 +736,61 @@
             resetGame();
           }, []);
 
-          const togglePlay = () => {
+          const togglePlay = async () => {
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtxRef.current.state === 'suspended') {
+                await audioCtxRef.current.resume();
+            }
+
             if (gameState === 'finished') resetGame();
-            if (!isPlaying && startTimeRef.current === 0) {
-                startTimeRef.current = performance.now();
-                cars.current.forEach(c => c.lapStartTime = startTimeRef.current);
-            } 
-            setIsPlaying(!isPlaying);
+            
+            const nextIsPlaying = !isPlaying;
+            
+            if (nextIsPlaying) {
+                if (gameState === 'idle') setGameState('running'); 
+                
+                if (startTimeRef.current === 0) {
+                    startTimeRef.current = performance.now();
+                    cars.current.forEach(c => c.lapStartTime = startTimeRef.current);
+                }
+                if (!isMuted) startEngineSound();
+            } else {
+                stopEngineSound();
+            }
+            
+            setIsPlaying(nextIsPlaying);
+            playClickSound();
           };
 
           const resetGame = () => {
             setIsPlaying(false);
             setGameState('idle');
             setWinner(null);
+            stopEngineSound();
             startTimeRef.current = 0;
             setCurrentTime(0);
-            setUserStats({ laps: 0, currentLapTime: 0, lastLapTime: 0, totalTime: 0 });
+            setUserStats({ laps: 0, currentLapTime: 0, lastLapTime: 0, totalTime: 0, lapHistory: [] });
 
             // Initialize cars based on track start position
-            const points = TRACK_LAYOUTS[currentTrackIdx].points;
+            const points = TRACK_LAYOUTS[currentTrackIdx].points.map(scalePoint);
             const startPoint = points[0];
             const startAngle = Math.atan2(points[1].y - points[0].y, points[1].x - points[0].x);
             
-            // Perpendicular vector for offset
             const px = Math.cos(startAngle + Math.PI/2);
             const py = Math.sin(startAngle + Math.PI/2);
-            
-            // Direction vector for starting behind line
             const dx = Math.cos(startAngle);
             const dy = Math.sin(startAngle);
 
-            // Spawn BEHIND the line (e.g., -40px)
             const spawnX = startPoint.x - dx * 40;
             const spawnY = startPoint.y - dy * 40;
 
             cars.current = [
-                { id: 'user', x: spawnX + px * 20, y: spawnY + py * 20, angle: startAngle, speed: 0, color: '#3b82f6', isAI: false, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
-                { id: 'ai1', x: spawnX - px * 20, y: spawnY - py * 20, angle: startAngle, speed: 0, color: '#ef4444', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
-                { id: 'ai2', x: spawnX - dx * 40 - px * 10, y: spawnY - dy * 40 + py * 10, angle: startAngle, speed: 0, color: '#f59e0b', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
-                { id: 'ai3', x: spawnX - dx * 40 + px * 10, y: spawnY - dy * 40 - py * 10, angle: startAngle, speed: 0, color: '#8b5cf6', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
+                { id: 'user', x: spawnX + px * 20, y: spawnY + py * 20, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#3b82f6', isAI: false, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0, lapHistory: [] },
+                { id: 'ai1', x: spawnX - px * 20, y: spawnY - py * 20, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#ef4444', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
+                { id: 'ai2', x: spawnX - dx * 40 - px * 10, y: spawnY - dy * 40 + py * 10, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#f59e0b', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
+                { id: 'ai3', x: spawnX - dx * 40 + px * 10, y: spawnY - dy * 40 - py * 10, angle: startAngle, moveAngle: startAngle, speed: 0, color: '#8b5cf6', isAI: true, laps: 0, lastCP: 0, finished: false, lapStartTime: 0, lastLapTime: 0, finishTime: 0 },
             ];
             draw();
           };
@@ -535,6 +798,7 @@
           const addBlock = () => {
             const newBlock = { id: Date.now(), sensor: 2, operator: '<', valueType: 'number', value: 50, action: 'BRAKE' };
             setBlocks([...blocks, newBlock]);
+            playClickSound();
           };
 
           const updateBlock = (id, field, value) => {
@@ -543,6 +807,7 @@
 
           const removeBlock = (id) => {
             setBlocks(blocks.filter(b => b.id !== id));
+            playClickSound();
           };
 
           const toggleValueType = (id) => {
@@ -554,36 +819,44 @@
                 }
                 return b;
             }));
+            playClickSound();
           };
+
+          const toggleMute = () => {
+              setIsMuted(!isMuted);
+              playClickSound();
+          }
 
           const fmtTime = (s) => s.toFixed(2) + 's';
 
           return (
-            <div className="flex flex-col md:flex-row h-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
+            /* Responsive Container: Column on Mobile, Row on Desktop */
+            <div className="flex flex-col-reverse lg:flex-row h-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
               
-              {/* --- Sidebar: Coding Area --- */}
-              <div className="w-full md:w-1/3 flex flex-col border-r border-slate-700 bg-slate-800 shadow-xl z-10">
-                <div className="p-4 bg-slate-900 border-b border-slate-700 space-y-4">
+              {/* --- Sidebar: Coding Area (Bottom on Mobile, Left on Desktop) --- */}
+              <div className="w-full lg:w-1/3 h-[55%] lg:h-full flex flex-col border-t lg:border-t-0 lg:border-r border-slate-700 bg-slate-800 shadow-xl z-20">
+                <div className="p-2 lg:p-4 bg-slate-900 border-b border-slate-700 space-y-2 lg:space-y-4">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold flex items-center gap-2 text-blue-400">
-                        <Cpu size={24} /> 
+                    <h2 className="text-lg lg:text-xl font-bold flex items-center gap-2 text-blue-400">
+                        <Cpu size={20} className="lg:w-6 lg:h-6" /> 
                         로직 에디터
                     </h2>
-                    <div className="flex gap-2">
-                        <button onClick={resetGame} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition" title="초기화">
-                            <RotateCcw size={20} />
+                    <div className="flex gap-1 lg:gap-2">
+                        <button onClick={resetGame} className="p-1.5 lg:p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition" title="초기화">
+                            <RotateCcw size={18} className="lg:w-5 lg:h-5" />
                         </button>
-                        <button onClick={togglePlay} className={`p-2 rounded-lg transition flex items-center gap-2 font-bold px-4 ${isPlaying ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'}`}>
-                            {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                        <button onClick={togglePlay} className={`p-1.5 lg:p-2 rounded-lg transition flex items-center gap-1 lg:gap-2 font-bold px-3 lg:px-4 text-sm lg:text-base ${isPlaying ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'}`}>
+                            {isPlaying ? <Pause size={18} className="lg:w-5 lg:h-5" /> : <Play size={18} className="lg:w-5 lg:h-5" />}
                             {isPlaying ? '일시정지' : '시작'}
                         </button>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700">
-                    <MapIcon size={18} className="text-slate-400" />
+                  {/* Track Select */}
+                  <div className="flex items-center gap-2 bg-slate-800 p-1.5 lg:p-2 rounded-lg border border-slate-700">
+                    <MapIcon size={16} className="text-slate-400 lg:w-[18px] lg:h-[18px]" />
                     <select 
-                        className="bg-transparent text-sm w-full outline-none text-slate-200"
+                        className="bg-transparent text-sm lg:text-base w-full outline-none text-slate-200"
                         value={currentTrackIdx}
                         onChange={(e) => setCurrentTrackIdx(Number(e.target.value))}
                     >
@@ -594,58 +867,65 @@
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-800/50 border-b border-slate-700">
-                    <div className="flex items-center gap-2 mb-2 text-xs uppercase tracking-wider text-slate-400">
-                        <Activity size={14} /> 실시간 센서 거리
+                {/* Sensors */}
+                <div className="p-2 lg:p-4 bg-slate-800/50 border-b border-slate-700">
+                    <div className="flex items-center gap-2 mb-1 lg:mb-2 text-[10px] lg:text-xs uppercase tracking-wider text-slate-400">
+                        <Activity size={12} className="lg:w-[14px] lg:h-[14px]" /> 실시간 센서 거리
                     </div>
                     <div className="grid grid-cols-5 gap-1 text-center">
                         {sensorReadings.map((val, idx) => {
                             const labels = ['좌측', '전방좌측', '전방', '전방우측', '우측'];
                             const color = val < 50 ? 'text-red-400' : 'text-green-400';
                             return (
-                                <div key={idx} className="bg-slate-900 p-2 rounded border border-slate-700">
-                                    <div className="text-[10px] text-slate-500">{labels[idx]}</div>
-                                    <div className={`font-mono text-sm font-bold ${color}`}>{Math.round(val)}</div>
+                                <div key={idx} className="bg-slate-900 p-1 lg:p-2 rounded border border-slate-700">
+                                    <div className="text-[9px] lg:text-[10px] text-slate-500">{labels[idx]}</div>
+                                    <div className={`font-mono text-xs lg:text-sm font-bold ${color}`}>{Math.round(val)}</div>
                                 </div>
                             );
                         })}
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {/* Blocks List - Scrollable */}
+                <div className="flex-1 overflow-y-auto p-2 lg:p-4 space-y-2 lg:space-y-3 no-scrollbar">
                   {blocks.length === 0 && (
-                    <div className="text-slate-500 text-center py-10 italic">로직 블록이 없습니다.</div>
+                    <div className="text-slate-500 text-center py-10 italic text-sm">로직 블록이 없습니다.</div>
                   )}
                   
                   {blocks.map((block) => (
-                    <div key={block.id} className="bg-slate-700 p-3 rounded-lg border-l-4 border-blue-500 shadow-sm flex items-center gap-2 flex-wrap text-sm group">
+                    <div key={block.id} className="bg-slate-700 p-2 lg:p-3 rounded-lg border-l-4 border-blue-500 shadow-sm flex items-center gap-1.5 lg:gap-2 flex-wrap text-xs lg:text-sm group">
                       <span className="font-bold text-blue-300">만약</span>
-                      <select className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
+                      <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none max-w-[80px] lg:max-w-none"
                         value={block.sensor} onChange={(e) => updateBlock(block.id, 'sensor', parseInt(e.target.value))}>
                         {Object.entries(SENSOR_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
                       </select>
                       <span>값이</span>
-                      <select className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
+                      <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
                         value={block.operator} onChange={(e) => updateBlock(block.id, 'operator', e.target.value)}>
-                        <option value="<">작다면 (&lt;)</option>
-                        <option value=">">크다면 (&gt;)</option>
+                        <option value="<">&lt;</option>
+                        <option value=">">&gt;</option>
                       </select>
                       <button onClick={() => toggleValueType(block.id)}
                         className="p-1 rounded bg-slate-600 hover:bg-slate-500 text-slate-200 transition"
                         title={block.valueType === 'number' ? "숫자와 비교하기" : "다른 센서와 비교하기"}>
-                        {block.valueType === 'number' ? <Hash size={14} /> : <Radar size={14} />}
+                        {block.valueType === 'number' ? <Hash size={12} className="lg:w-[14px] lg:h-[14px]" /> : <Radar size={12} className="lg:w-[14px] lg:h-[14px]" />}
                       </button>
                       {block.valueType === 'number' ? (
-                          <input type="number" className="bg-slate-900 border border-slate-600 rounded w-16 px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
-                            value={block.value} onChange={(e) => updateBlock(block.id, 'value', parseInt(e.target.value))} />
+                          <input type="number" className="bg-slate-900 border border-slate-600 rounded w-12 lg:w-16 px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
+                            value={block.value} 
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                updateBlock(block.id, 'value', isNaN(val) ? 0 : val);
+                            }} 
+                          />
                       ) : (
-                          <select className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-200 focus:border-blue-500 outline-none w-24"
+                          <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none w-20 lg:w-24"
                             value={block.value} onChange={(e) => updateBlock(block.id, 'value', parseInt(e.target.value))}>
                             {Object.entries(SENSOR_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
                           </select>
                       )}
                       <span className="font-bold text-blue-300">→</span>
-                      <select className={`border border-slate-600 rounded px-2 py-1 font-bold outline-none flex-grow
+                      <select className={`border border-slate-600 rounded px-1 lg:px-2 py-1 font-bold outline-none flex-grow
                             ${block.action === 'LEFT' || block.action === 'RIGHT' ? 'bg-indigo-900 text-indigo-200' : ''}
                             ${block.action === 'ACCEL' ? 'bg-green-900 text-green-200' : ''}
                             ${block.action === 'BRAKE' ? 'bg-red-900 text-red-200' : ''}`}
@@ -655,26 +935,52 @@
                         <option value="ACCEL">가속</option>
                         <option value="BRAKE">감속</option>
                       </select>
-                      <button onClick={() => removeBlock(block.id)} className="text-slate-500 hover:text-red-400 ml-auto opacity-0 group-hover:opacity-100 transition"><Trash2 size={16} /></button>
+                      <button onClick={() => removeBlock(block.id)} className="text-slate-500 hover:text-red-400 ml-auto opacity-100 lg:opacity-0 group-hover:opacity-100 transition"><Trash2 size={14} className="lg:w-[16px] lg:h-[16px]" /></button>
                     </div>
                   ))}
 
-                  <button onClick={addBlock} className="w-full py-3 border-2 border-dashed border-slate-600 text-slate-400 rounded-lg hover:border-blue-500 hover:text-blue-400 transition flex justify-center items-center gap-2">
-                    <Plus size={18} /> 로직 블록 추가
+                  <button onClick={addBlock} className="w-full py-2 lg:py-3 border-2 border-dashed border-slate-600 text-slate-400 rounded-lg hover:border-blue-500 hover:text-blue-400 transition flex justify-center items-center gap-2 text-sm lg:text-base">
+                    <Plus size={16} className="lg:w-[18px] lg:h-[18px]" /> 로직 블록 추가
                   </button>
                 </div>
               </div>
 
-              {/* --- Main View: Canvas --- */}
-              <div className="flex-1 relative bg-neutral-800 flex justify-center items-center p-4 overflow-hidden">
+              {/* --- Main View: Canvas (Top on Mobile, Right on Desktop) --- */}
+              <div className="w-full lg:flex-1 h-[45%] lg:h-full relative bg-neutral-800 flex justify-center items-center p-2 lg:p-4 overflow-hidden">
                 <canvas ref={canvasRef} width={TRACK_WIDTH} height={TRACK_HEIGHT}
                     className="bg-green-500 rounded-xl shadow-2xl max-w-full max-h-full object-contain cursor-crosshair" />
                 
-                {/* Top Right State Badge (Moved from Center) */}
-                <div className="absolute top-6 right-6 pointer-events-none">
-                    <div className="bg-slate-900/80 backdrop-blur px-6 py-2 rounded-full border border-slate-700 shadow-lg flex items-center gap-4">
-                        <div className="text-slate-400 text-xs uppercase tracking-widest">상태</div>
-                        <div className={`text-xl font-black italic ${gameState === 'running' ? 'text-green-400' : 'text-slate-200'}`}>
+                {/* Top Left: Lap Time History Panel */}
+                <div className="absolute top-2 left-2 lg:top-6 lg:left-6 pointer-events-none scale-75 lg:scale-100 origin-top-left">
+                    <div className="bg-slate-900/90 backdrop-blur p-3 rounded-xl border border-slate-700 shadow-xl space-y-2 min-w-[140px]">
+                        <div className="text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-700 pb-1 mb-1">Lap History</div>
+                        {[...Array(TOTAL_LAPS)].map((_, i) => {
+                            const lapTime = userStats.lapHistory[i];
+                            const isCurrent = userStats.laps === i;
+                            return (
+                                <div key={i} className="flex justify-between items-center text-xs font-mono">
+                                    <span className={isCurrent ? 'text-yellow-400 font-bold' : 'text-slate-500'}>LAP {i + 1}</span>
+                                    <span className={isCurrent ? 'text-white' : (lapTime ? 'text-green-400' : 'text-slate-600')}>
+                                        {lapTime ? fmtTime(lapTime) : (isCurrent ? fmtTime(userStats.currentLapTime) : '--:--')}
+                                    </span>
+                                </div>
+                            )
+                        })}
+                        <div className="border-t border-slate-700 pt-1 flex justify-between items-center text-xs font-mono text-blue-300 mt-1">
+                            <span>TOTAL</span>
+                            <span>{fmtTime(userStats.totalTime)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top Right State Badge & Mute */}
+                <div className="absolute top-2 right-2 lg:top-6 lg:right-6 pointer-events-auto flex gap-2">
+                    <button onClick={toggleMute} className="bg-slate-900/80 backdrop-blur p-2 rounded-full border border-slate-700 shadow-lg text-slate-300 hover:bg-slate-800 transition scale-90 lg:scale-100">
+                        {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                    </button>
+                    <div className="bg-slate-900/80 backdrop-blur px-3 py-1 lg:px-6 lg:py-2 rounded-full border border-slate-700 shadow-lg flex items-center gap-2 lg:gap-4 scale-90 lg:scale-100 origin-top-right">
+                        <div className="text-slate-400 text-[10px] lg:text-xs uppercase tracking-widest">상태</div>
+                        <div className={`text-base lg:text-xl font-black italic ${gameState === 'running' ? 'text-green-400' : 'text-slate-200'}`}>
                             {gameState === 'idle' && 'READY'}
                             {gameState === 'running' && 'RUN'}
                             {gameState === 'finished' && 'FINISH'}
@@ -682,52 +988,52 @@
                     </div>
                 </div>
 
-                {/* Bottom Horizontal Dashboard (Moved from Top to Bottom to avoid blocking start line) */}
-                <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-4 px-4 pointer-events-none">
+                {/* Top Center Horizontal Dashboard (Moved from Bottom to Top) */}
+                <div className="absolute top-12 lg:top-6 left-0 right-0 flex justify-center gap-4 px-4 pointer-events-none">
                     {/* My Car Stats Strip */}
-                    <div className="bg-slate-900/90 backdrop-blur px-6 py-3 rounded-full border border-slate-700 shadow-2xl flex items-center gap-6 text-sm transform transition-all hover:scale-105">
-                         <div className="flex items-center gap-2">
-                            <Flag size={14} className="text-blue-400"/>
-                            <span className="text-slate-400">Laps</span>
-                            <span className="font-mono font-bold text-white text-lg">{userStats.laps}/{TOTAL_LAPS}</span>
+                    <div className="bg-slate-900/90 backdrop-blur px-3 py-1.5 lg:px-6 lg:py-3 rounded-full border border-slate-700 shadow-2xl flex items-center gap-3 lg:gap-6 text-xs lg:text-sm transform transition-all hover:scale-105">
+                         <div className="flex items-center gap-1 lg:gap-2">
+                            <Flag size={12} className="text-blue-400 lg:w-[14px] lg:h-[14px]"/>
+                            <span className="text-slate-400 hidden lg:inline">Laps</span>
+                            <span className="font-mono font-bold text-white text-sm lg:text-lg">{userStats.laps}/{TOTAL_LAPS}</span>
                          </div>
                          
-                         <div className="w-px h-8 bg-slate-700"></div>
+                         <div className="w-px h-6 lg:h-8 bg-slate-700"></div>
 
                          <div className="flex flex-col items-center">
-                            <span className="text-[10px] text-slate-400">현재 랩</span>
+                            <span className="text-[9px] lg:text-[10px] text-slate-400">현재 랩</span>
                             <span className="font-mono font-bold text-yellow-400">{fmtTime(userStats.currentLapTime)}</span>
                          </div>
                          
-                         <div className="flex flex-col items-center">
-                            <span className="text-[10px] text-slate-400">이전 랩</span>
+                         <div className="flex flex-col items-center hidden sm:flex">
+                            <span className="text-[9px] lg:text-[10px] text-slate-400">이전 랩</span>
                             <span className="font-mono text-slate-300">{fmtTime(userStats.lastLapTime)}</span>
                          </div>
 
-                         <div className="w-px h-8 bg-slate-700"></div>
+                         <div className="w-px h-6 lg:h-8 bg-slate-700 hidden sm:block"></div>
 
-                         <div className="flex items-center gap-2">
-                            <Timer size={14} className="text-green-400"/>
-                            <span className="font-mono font-bold text-lg text-green-400">{fmtTime(userStats.totalTime)}</span>
+                         <div className="flex items-center gap-1 lg:gap-2">
+                            <Timer size={12} className="text-green-400 lg:w-[14px] lg:h-[14px]"/>
+                            <span className="font-mono font-bold text-sm lg:text-lg text-green-400">{fmtTime(userStats.totalTime)}</span>
                          </div>
                     </div>
 
                     {/* Winner Badge */}
                     {gameState === 'finished' && (
-                        <div className={`bg-slate-900/90 backdrop-blur px-6 py-3 rounded-full border border-slate-700 shadow-2xl flex items-center gap-2 font-bold animate-bounce ${winner === 'user' ? 'text-yellow-400' : 'text-red-400'}`}>
-                            <Trophy size={18} />
+                        <div className={`bg-slate-900/90 backdrop-blur px-4 py-2 lg:px-6 lg:py-3 rounded-full border border-slate-700 shadow-2xl flex items-center gap-2 font-bold animate-bounce ${winner === 'user' ? 'text-yellow-400' : 'text-red-400'} text-sm lg:text-base`}>
+                            <Trophy size={16} className="lg:w-[18px] lg:h-[18px]" />
                             {winner === 'user' ? '우승!' : '패배!'}
                         </div>
                     )}
                 </div>
                 
-                {/* Simple Lap Counters for AI (Bottom Left, adjusted slightly up) */}
-                <div className="absolute bottom-24 left-8 flex gap-4">
+                {/* AI Lap Counters (Bottom Left) */}
+                <div className="absolute bottom-12 lg:bottom-24 left-2 lg:left-8 flex gap-2 lg:gap-4 scale-75 lg:scale-100 origin-bottom-left">
                     {cars.current.slice(1).map(c => (
-                        <div key={c.id} className="bg-slate-900/80 backdrop-blur p-2 rounded border border-slate-700 flex flex-col items-center min-w-[60px]">
-                            <div className="w-3 h-3 rounded-full mb-1" style={{backgroundColor: c.color}}></div>
-                            <div className="text-xs text-slate-400">{c.id.toUpperCase()}</div>
-                            <div className="font-mono font-bold">{c.laps}/{TOTAL_LAPS}</div>
+                        <div key={c.id} className="bg-slate-900/80 backdrop-blur p-1.5 lg:p-2 rounded border border-slate-700 flex flex-col items-center min-w-[50px] lg:min-w-[60px]">
+                            <div className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full mb-1" style={{backgroundColor: c.color}}></div>
+                            <div className="text-[9px] lg:text-xs text-slate-400">{c.id.toUpperCase()}</div>
+                            <div className="font-mono font-bold text-xs lg:text-sm">{c.laps}/{TOTAL_LAPS}</div>
                         </div>
                     ))}
                 </div>
