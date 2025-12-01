@@ -83,7 +83,7 @@
         const CAR_SIZE = { width: 24, height: 14 };
         const SENSOR_RANGE = 150;
         const MAP_SCALE = 0.85;
-        const MAX_SKID_MARKS = 50; // 스키드 마크 최대 개수 (80 -> 50으로 감소)
+        const MAX_SKID_MARKS = 50; // 스키드 마크 최대 개수 
 
         // Detection Config
         const CHECKPOINT_RADIUS_START = 50; 
@@ -91,10 +91,17 @@
         const TOTAL_LAPS = 3;
 
         // Car Physics
-        const ACCELERATION = 0.7; // 0.6 -> 0.7로 변경하여 최고 안정 속도를 10으로 맞춤 (물리적 한계 해제)
-        const MAX_SPEED = 10;      // 최고 속도 
+        const ACCELERATION = 0.7; 
+        const MAX_SPEED = 10;      
         const FRICTION = 0.93;    
         const TURN_SPEED = 0.08;
+
+        // Track Aesthetics (Adjusted to be slightly narrower)
+        const TRACK_AESTHETICS = {
+            border: 90, // 110 -> 90
+            curb: 80,   // 100 -> 80
+            asphalt: 70 // 90 -> 70
+        };
 
         const SENSOR_LABELS = {
             0: '좌측 센서',
@@ -104,77 +111,65 @@
             4: '우측 센서'
         };
 
-        // Initial Logic Blocks
-        const INITIAL_BLOCKS = [
-          { id: 1, sensor: 2, operator: '<', valueType: 'number', value: 80, action: 'BRAKE' },
-          { id: 2, sensor: 0, operator: '<', valueType: 'number', value: 40, action: 'RIGHT' },
-          { id: 3, sensor: 4, operator: '<', valueType: 'number', value: 40, action: 'LEFT' },
-          { id: 4, sensor: 0, operator: '>', valueType: 'sensor', value: 4, action: 'RIGHT' },
-          { id: 5, sensor: 4, operator: '>', valueType: 'sensor', value: 0, action: 'LEFT' },
-          { id: 6, sensor: 2, operator: '>', valueType: 'number', value: 0, action: 'ACCEL' },
+        const OPERATOR_OPTIONS = [
+            { value: '<', label: '작다면 (<)' },
+            { value: '>', label: '크다면 (>)' },
+            { value: '<=', label: '같거나 작다면 (<=)' },
+            { value: '>=', label: '같거나 크다면 (>=)' },
+            { value: '==', label: '같다면 (==)' },
+            { value: '!=', label: '같지 않다면 (!=)' },
+        ];
+        
+        const FLOW_OPTIONS = [
+            { value: 'IF', label: '만약 (IF)', color: 'border-blue-500' },
+            { value: 'ELSE_IF', label: '아니면 만약 (ELSE IF)', color: 'border-indigo-500' },
+            { value: 'ELSE', label: '아니면 (ELSE)', color: 'border-purple-500' },
         ];
 
-        // --- Track Layouts ---
+
+        // Initial Logic Blocks (Updated to use flowType)
+        const INITIAL_BLOCKS = [
+          { id: 1, flowType: 'IF', sensor: 2, operator: '<', valueType: 'number', value: 80, action: 'BRAKE' },
+          { id: 2, flowType: 'ELSE_IF', sensor: 0, operator: '>', valueType: 'sensor', value: 4, action: 'RIGHT' },
+          { id: 3, flowType: 'ELSE_IF', sensor: 4, operator: '>', valueType: 'sensor', value: 0, action: 'LEFT' },
+          { id: 4, flowType: 'ELSE', sensor: 2, operator: '>', valueType: 'number', value: 0, action: 'ACCEL' },
+        ];
+
+        // --- Track Layouts (Adjusted for complexity and length) ---
         const TRACK_LAYOUTS = [
             {
                 id: 'technical',
-                name: '1. 테크니컬 서킷 (기본)',
+                name: '1. 테크니컬 서킷 (초급)', // 길이 보통, 코너 밸런스
                 points: [
-                    { x: 350, y: 100 }, 
-                    { x: 500, y: 50 }, { x: 700, y: 100 },
-                    { x: 750, y: 250 }, { x: 600, y: 350 }, { x: 700, y: 500 }, { x: 500, y: 550 },
-                    { x: 300, y: 500 }, { x: 150, y: 450 }, { x: 50, y: 300 }, 
-                    { x: 100, y: 100 },
-                    { x: 200, y: 100 }
+                    { x: 350, y: 100 }, { x: 500, y: 50 }, { x: 700, y: 100 },
+                    { x: 750, y: 200 }, { x: 700, y: 300 }, { x: 600, y: 350 }, { x: 700, y: 500 },
+                    { x: 500, y: 550 }, { x: 300, y: 500 }, { x: 150, y: 450 }, { x: 50, y: 300 }, 
+                    { x: 100, y: 100 }, { x: 200, y: 100 }
                 ]
             },
             {
                 id: 'oval',
-                name: '2. 스피드 오벌 (초급)',
+                name: '2. 스피드 오벌 (입문)', // 길이 짧음, 단순 코너
                 points: [
-                    { x: 400, y: 100 },
-                    { x: 650, y: 100 }, 
-                    { x: 750, y: 300 }, 
-                    { x: 650, y: 500 }, { x: 150, y: 500 }, 
-                    { x: 50, y: 300 },
+                    { x: 400, y: 100 }, { x: 650, y: 100 }, { x: 750, y: 300 }, 
+                    { x: 650, y: 500 }, { x: 150, y: 500 }, { x: 50, y: 300 },
                     { x: 150, y: 100 }
                 ]
             },
             {
-                id: 'hardcore',
-                name: '3. 하드코어 8자 (상급)',
-                points: [
-                    { x: 400, y: 100 }, { x: 700, y: 100 },
-                    { x: 700, y: 500 }, { x: 400, y: 300 },
-                    { x: 100, y: 500 }, { x: 100, y: 300 },
-                    { x: 100, y: 100 }
-                ]
-            },
-            {
-                id: 'square',
-                name: '4. 심플 스퀘어 (입문)',
-                points: [
-                    { x: 400, y: 100 }, 
-                    { x: 700, y: 100 }, { x: 700, y: 500 }, 
-                    { x: 100, y: 500 }, { x: 100, y: 100 }
-                ]
-            },
-            {
                 id: 'pentagon',
-                name: '5. 펜타곤 챌린지 (중급)',
+                name: '3. 펜타곤 챌린지 (중급)', // 길이 보통, 둔각 코너링
                 points: [
-                    { x: 400, y: 100 }, 
-                    { x: 500, y: 100 }, { x: 700, y: 300 }, 
-                    { x: 500, y: 500 }, { x: 300, y: 500 }, 
+                    { x: 400, y: 100 }, { x: 500, y: 100 }, { x: 700, y: 300 }, 
+                    { x: 550, y: 500 }, { x: 250, y: 500 }, 
                     { x: 100, y: 300 }, { x: 300, y: 100 }
                 ]
             },
             {
                 id: 'zigzag',
-                name: '6. 지그재그 로드 (상급)',
+                name: '4. 지그재그 로드 (중급)', // 길이 보통, 연속 코너링
                 points: [
-                    { x: 400, y: 100 }, 
-                    { x: 700, y: 100 }, { x: 700, y: 200 }, 
+                    { x: 400, y: 100 }, { x: 700, y: 100 }, { x: 700, y: 200 }, 
                     { x: 200, y: 300 }, 
                     { x: 700, y: 400 }, { x: 700, y: 500 }, 
                     { x: 100, y: 500 }, { x: 100, y: 100 }
@@ -182,44 +177,67 @@
             },
             {
                 id: 'hourglass',
-                name: '7. 모래시계 (상급)',
+                name: '5. 모래시계 (상급)', // 길이 보통, 좁은 교차점
                 points: [
-                    { x: 400, y: 100 }, 
-                    { x: 700, y: 100 }, { x: 500, y: 300 }, 
+                    { x: 400, y: 100 }, { x: 700, y: 100 }, { x: 500, y: 300 }, 
                     { x: 700, y: 500 }, { x: 100, y: 500 }, 
                     { x: 300, y: 300 }, { x: 100, y: 100 }
                 ]
             },
             {
-                id: 'slalom',
-                name: '8. 슈퍼 슬라롬 (최상급)',
+                id: 'hardcore_long',
+                name: '6. 하드코어 8자 (상급)', // 길이 김, 교차로 필수
                 points: [
-                    { x: 400, y: 100 },
-                    { x: 750, y: 100 }, { x: 750, y: 500 },
-                    { x: 600, y: 300 }, { x: 450, y: 500 },
-                    { x: 300, y: 300 }, { x: 150, y: 500 },
-                    { x: 50, y: 500 }, { x: 50, y: 100 }
+                    { x: 400, y: 100 }, { x: 750, y: 100 },
+                    { x: 750, y: 250 }, { x: 600, y: 400 }, // Long sweep
+                    { x: 750, y: 550 }, { x: 400, y: 300 }, // Cross point
+                    { x: 50, y: 550 }, { x: 200, y: 400 },
+                    { x: 50, y: 250 }, { x: 50, y: 100 }
                 ]
             },
             {
-                id: 'grand_tour',
-                name: '9. 그랜드 투어 (초장거리)',
+                id: 'slalom_long',
+                name: '7. 슈퍼 슬라롬 (최상급)', // 길이 매우 김, 연속 S자 코스
+                points: [
+                    { x: 400, y: 100 },
+                    { x: 750, y: 100 }, { x: 750, y: 250 },
+                    { x: 600, y: 350 }, { x: 750, y: 450 },
+                    { x: 750, y: 500 }, { x: 400, y: 550 },
+                    { x: 50, y: 500 }, { x: 50, y: 450 },
+                    { x: 200, y: 350 }, { x: 50, y: 250 },
+                    { x: 50, y: 100 }
+                ]
+            },
+            {
+                id: 'grand_long',
+                name: '8. 그랜드 투어 (최상급)', // 길이 가장 김, 장거리 레이스
                 points: [
                     { x: 400, y: 100 }, 
-                    { x: 750, y: 100 }, { x: 750, y: 550 }, 
-                    { x: 50, y: 550 }, { x: 50, y: 100 }
+                    { x: 750, y: 100 }, { x: 750, y: 200 }, { x: 650, y: 300 }, 
+                    { x: 750, y: 400 }, { x: 750, y: 550 }, 
+                    { x: 50, y: 550 }, { x: 50, y: 400 },
+                    { x: 150, y: 300 }, { x: 50, y: 200 },
+                    { x: 50, y: 100 }
                 ]
             },
             {
                 id: 'star',
-                name: '10. 별 모양 서킷 (이벤트)',
+                name: '9. 별 모양 서킷 (이벤트)', // 길이 보통, 급격한 각도
                 points: [
-                    { x: 400, y: 100 }, 
-                    { x: 500, y: 100 }, { x: 700, y: 250 }, 
+                    { x: 400, y: 100 }, { x: 500, y: 100 }, { x: 700, y: 250 }, 
                     { x: 500, y: 400 }, { x: 600, y: 550 }, 
                     { x: 400, y: 450 }, { x: 200, y: 550 }, 
                     { x: 300, y: 400 }, { x: 100, y: 250 }, 
                     { x: 300, y: 100 }
+                ]
+            },
+            {
+                id: 'simple_square',
+                name: '10. 심플 스퀘어 (입문)', // 길이 짧음, 단순 직각 코너
+                points: [
+                    { x: 400, y: 100 }, 
+                    { x: 700, y: 100 }, { x: 700, y: 500 }, 
+                    { x: 100, y: 500 }, { x: 100, y: 100 }
                 ]
             }
         ];
@@ -449,7 +467,8 @@
               const d = distToSegment(x, y, p1.x, p1.y, p2.x, p2.y);
               if (d < minDist) minDist = d;
             }
-            return minDist > 58; 
+            // Track Aesthetics: Check against the new, narrower curb size (TRACK_AESTHETICS.curb / 2 + 3)
+            return minDist > (TRACK_AESTHETICS.curb / 2) + 3; 
           };
 
           const distToSegment = (x, y, x1, y1, x2, y2) => {
@@ -589,7 +608,7 @@
                 const localX = dx * Math.cos(-trackAngle) - dy * Math.sin(-trackAngle);
                 const localY = dx * Math.sin(-trackAngle) + dy * Math.cos(-trackAngle);
                 
-                if (Math.abs(localX) < 20 && Math.abs(localY) < 100) {
+                if (Math.abs(localX) < 20 && Math.abs(localY) < (TRACK_AESTHETICS.asphalt / 2 + 5)) { // Use narrower asphalt width for line check
                     isCheckpointReached = true;
                 }
             } else {
@@ -652,37 +671,85 @@
             return { steer, throttle: throttle - variance };
           };
 
+          const evaluateCondition = (block, currentReadings) => {
+              if (block.flowType === 'ELSE') return false; 
+              
+              const leftValue = currentReadings[block.sensor];
+              let rightValue = block.valueType === 'sensor' ? currentReadings[block.value] : block.value;
+
+              if (block.operator === '<') return leftValue < rightValue;
+              if (block.operator === '>') return leftValue > rightValue;
+              if (block.operator === '<=') return leftValue <= rightValue;
+              if (block.operator === '>=') return leftValue >= rightValue;
+              if (block.operator === '==') return leftValue === rightValue;
+              if (block.operator === '!=') return leftValue !== rightValue;
+              
+              return false;
+          }
+          
+          const applyAction = (block, steerOutputs) => {
+                switch(block.action) {
+                    case 'LEFT': steerOutputs.turnLeft = true; break;
+                    case 'RIGHT': steerOutputs.turnRight = true; break;
+                    case 'ACCEL': steerOutputs.gas = true; break;
+                    case 'BRAKE': steerOutputs.brake = true; break;
+                    default: break;
+                }
+          }
+
+
           const getUserInputs = (car, currentReadings) => {
+            const steerOutputs = {
+                turnLeft: false,
+                turnRight: false,
+                gas: false,
+                brake: false,
+            };
+            
             let steer = 0;
             let throttle = 0;
-            let turnLeft = false;
-            let turnRight = false;
-            let gas = false;
-            let brake = false;
+            let matchedInChain = false; 
 
-            blocks.forEach(block => {
-                const leftValue = currentReadings[block.sensor];
-                let rightValue = block.valueType === 'sensor' ? currentReadings[block.value] : block.value;
-                let conditionMet = false;
+            // 그룹화된 IF-ELSE IF-ELSE 체인을 순차적으로 실행
+            for (let i = 0; i < blocks.length; i++) {
+                const block = blocks[i];
+                const conditionMet = evaluateCondition(block, currentReadings);
                 
-                if (block.operator === '<') conditionMet = leftValue < rightValue;
-                if (block.operator === '>') conditionMet = leftValue > rightValue;
+                const isStartOfChain = block.flowType === 'IF';
+                const isElseIf = block.flowType === 'ELSE_IF';
+                const isElse = block.flowType === 'ELSE';
 
-                if (conditionMet) {
-                    switch(block.action) {
-                        case 'LEFT': turnLeft = true; break;
-                        case 'RIGHT': turnRight = true; break;
-                        case 'ACCEL': gas = true; break;
-                        case 'BRAKE': brake = true; break;
-                        default: break;
+                if (isStartOfChain) {
+                    // 새로운 체인 시작: IF
+                    matchedInChain = false;
+                    if (conditionMet) {
+                        applyAction(block, steerOutputs);
+                        matchedInChain = true; // 현재 체인에서 매칭됨
                     }
+                } else if (isElseIf) {
+                    // ELSE IF
+                    if (!matchedInChain && conditionMet) {
+                        applyAction(block, steerOutputs);
+                        matchedInChain = true; // 매칭되었으므로 다음 ELSE/ELSE_IF는 건너뜀
+                    }
+                } else if (isElse) {
+                    // ELSE
+                    if (!matchedInChain) {
+                        applyAction(block, steerOutputs);
+                        // ELSE 실행 후, 체인이 끝난 것으로 간주하고 matchedInChain을 유지 (다음 IF에서 초기화)
+                    }
+                } else {
+                    // IF, ELSE IF, ELSE가 아닌 독립적인 블록이 필요한 경우 (현재는 사용 안 함)
+                    // if (conditionMet) applyAction(block, steerOutputs);
                 }
-            });
+            }
+            
+            // 최종 행동 합산
+            if (steerOutputs.turnLeft) steer -= 1;
+            if (steerOutputs.turnRight) steer += 1;
+            if (steerOutputs.gas) throttle += 1;
+            if (steerOutputs.brake) throttle -= 1;
 
-            if (turnLeft) steer -= 1;
-            if (turnRight) steer += 1;
-            if (gas) throttle += 1;
-            if (brake) throttle -= 1;
             return { steer, throttle };
           };
 
@@ -740,9 +807,9 @@
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             
-            // Border
+            // Border (Red/White)
             ctx.strokeStyle = '#dc2626';
-            ctx.lineWidth = 110;
+            ctx.lineWidth = TRACK_AESTHETICS.border;
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
             points.forEach(p => ctx.lineTo(p.x, p.y));
@@ -751,12 +818,12 @@
 
             // White Curb
             ctx.strokeStyle = '#f8fafc';
-            ctx.lineWidth = 100;
+            ctx.lineWidth = TRACK_AESTHETICS.curb;
             ctx.stroke();
 
-            // Asphalt
+            // Asphalt (Dark Gray)
             ctx.strokeStyle = '#334155'; 
-            ctx.lineWidth = 90;
+            ctx.lineWidth = TRACK_AESTHETICS.asphalt;
             ctx.stroke();
 
             // Skid Marks (Segmented)
@@ -764,9 +831,6 @@
                 if (car.skidMarks && car.skidMarks.length > 1) {
                     ctx.lineWidth = 4;
                     ctx.strokeStyle = `rgba(20, 20, 20, 0.3)`; // Darker skid marks
-                    
-                    // We must begin path for each segment to avoid connecting disjoint skids
-                    // Optimization: Group by segmentId could be faster, but simple loop is fine for <300 pts
                     
                     for(let i=0; i<car.skidMarks.length-1; i++) {
                         const p1 = car.skidMarks[i];
@@ -801,14 +865,15 @@
             ctx.translate(points[0].x, points[0].y);
             ctx.rotate(startAngle); 
             
-            // Draw Start Line (Checkered)
+            // Draw Start Line (Checkered) - Height based on new narrower track width
+            const lineHalfHeight = TRACK_AESTHETICS.asphalt / 2 + 10; // Asphalt half-width + small buffer
             ctx.fillStyle = '#fff';
-            ctx.fillRect(-10, -80, 20, 160); 
+            ctx.fillRect(-10, -lineHalfHeight, 20, lineHalfHeight * 2); 
             
             ctx.fillStyle = '#000';
             for(let i=0; i<8; i++) {
                 for(let j=0; j<2; j++) {
-                    if((i+j)%2===0) ctx.fillRect(-10 + j*10, -80 + i*20, 10, 20);
+                    if((i+j)%2===0) ctx.fillRect(-10 + j*10, -lineHalfHeight + i*(lineHalfHeight*2/8), 10, lineHalfHeight*2/8);
                 }
             }
             ctx.restore();
@@ -949,7 +1014,7 @@
           };
 
           const addBlock = () => {
-            const newBlock = { id: Date.now(), sensor: 2, operator: '<', valueType: 'number', value: 50, action: 'BRAKE' };
+            const newBlock = { id: Date.now(), flowType: 'IF', sensor: 2, operator: '<', valueType: 'number', value: 50, action: 'BRAKE' };
             setBlocks([...blocks, newBlock]);
             playClickSound();
           };
@@ -1045,52 +1110,75 @@
                     <div className="text-slate-500 text-center py-10 italic text-sm">로직 블록이 없습니다.</div>
                   )}
                   
-                  {blocks.map((block) => (
-                    <div key={block.id} className="bg-slate-700 p-2 lg:p-3 rounded-lg border-l-4 border-blue-500 shadow-sm flex items-center gap-1.5 lg:gap-2 flex-wrap text-xs lg:text-sm group">
-                      <span className="font-bold text-blue-300">만약</span>
-                      <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none max-w-[80px] lg:max-w-none"
-                        value={block.sensor} onChange={(e) => updateBlock(block.id, 'sensor', parseInt(e.target.value))}>
-                        {Object.entries(SENSOR_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
-                      </select>
-                      <span>값이</span>
-                      <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
-                        value={block.operator} onChange={(e) => updateBlock(block.id, 'operator', e.target.value)}>
-                        <option value="<">&lt;</option>
-                        <option value=">">&gt;</option>
-                      </select>
-                      <button onClick={() => toggleValueType(block.id)}
-                        className="p-1 rounded bg-slate-600 hover:bg-slate-500 text-slate-200 transition"
-                        title={block.valueType === 'number' ? "숫자와 비교하기" : "다른 센서와 비교하기"}>
-                        {block.valueType === 'number' ? <Hash size={12} className="lg:w-[14px] lg:h-[14px]" /> : <Radar size={12} className="lg:w-[14px] lg:h-[14px]" />}
-                      </button>
-                      {block.valueType === 'number' ? (
-                          <input type="number" className="bg-slate-900 border border-slate-600 rounded w-12 lg:w-16 px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
-                            value={block.value} 
-                            onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                updateBlock(block.id, 'value', isNaN(val) ? 0 : val);
-                            }} 
-                          />
-                      ) : (
-                          <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none w-20 lg:w-24"
-                            value={block.value} onChange={(e) => updateBlock(block.id, 'value', parseInt(e.target.value))}>
-                            {Object.entries(SENSOR_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                  {blocks.map((block) => {
+                      const flow = FLOW_OPTIONS.find(f => f.value === block.flowType);
+                      const isElse = block.flowType === 'ELSE';
+                      const isIfElseIf = block.flowType === 'IF' || block.flowType === 'ELSE_IF';
+                      const borderClass = flow ? flow.color : 'border-slate-500';
+
+                      return (
+                        <div key={block.id} className={`bg-slate-700 p-2 lg:p-3 rounded-lg border-l-4 ${borderClass} shadow-sm flex items-center gap-1.5 lg:gap-2 flex-wrap text-xs lg:text-sm group`}>
+                          
+                          {/* Flow Type Selector */}
+                          <select className={`bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none font-bold max-w-[120px] lg:max-w-none 
+                                ${block.flowType === 'ELSE' ? 'w-full' : ''}`}
+                            value={block.flowType} onChange={(e) => updateBlock(block.id, 'flowType', e.target.value)}>
+                            {FLOW_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
                           </select>
-                      )}
-                      <span className="font-bold text-blue-300">→</span>
-                      <select className={`border border-slate-600 rounded px-1 lg:px-2 py-1 font-bold outline-none flex-grow
-                            ${block.action === 'LEFT' || block.action === 'RIGHT' ? 'bg-indigo-900 text-indigo-200' : ''}
-                            ${block.action === 'ACCEL' ? 'bg-green-900 text-green-200' : ''}
-                            ${block.action === 'BRAKE' ? 'bg-red-900 text-red-200' : ''}`}
-                        value={block.action} onChange={(e) => updateBlock(block.id, 'action', e.target.value)}>
-                        <option value="LEFT">좌회전</option>
-                        <option value="RIGHT">우회전</option>
-                        <option value="ACCEL">가속</option>
-                        <option value="BRAKE">감속</option>
-                      </select>
-                      <button onClick={() => removeBlock(block.id)} className="text-slate-500 hover:text-red-400 ml-auto opacity-100 lg:opacity-0 group-hover:opacity-100 transition"><Trash2 size={14} className="lg:w-[16px] lg:h-[16px]" /></button>
-                    </div>
-                  ))}
+
+                          {/* Condition Fields (Hidden for ELSE) */}
+                          {isIfElseIf && (
+                              <React.Fragment>
+                                  <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none max-w-[80px] lg:max-w-none"
+                                    value={block.sensor} onChange={(e) => updateBlock(block.id, 'sensor', parseInt(e.target.value))}>
+                                    {Object.entries(SENSOR_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                                  </select>
+                                  
+                                  <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
+                                    value={block.operator} onChange={(e) => updateBlock(block.id, 'operator', e.target.value)}>
+                                    {OPERATOR_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                                  </select>
+
+                                  <button onClick={() => toggleValueType(block.id)}
+                                    className="p-1 rounded bg-slate-600 hover:bg-slate-500 text-slate-200 transition"
+                                    title={block.valueType === 'number' ? "숫자와 비교하기" : "다른 센서와 비교하기"}>
+                                    {block.valueType === 'number' ? <Hash size={12} className="lg:w-[14px] lg:h-[14px]" /> : <Radar size={12} className="lg:w-[14px] lg:h-[14px]" />}
+                                  </button>
+                                  
+                                  {block.valueType === 'number' ? (
+                                      <input type="number" className="bg-slate-900 border border-slate-600 rounded w-12 lg:w-16 px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none"
+                                        value={block.value} 
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value);
+                                            updateBlock(block.id, 'value', isNaN(val) ? 0 : val);
+                                        }} 
+                                      />
+                                  ) : (
+                                      <select className="bg-slate-900 border border-slate-600 rounded px-1 lg:px-2 py-1 text-slate-200 focus:border-blue-500 outline-none w-20 lg:w-24"
+                                        value={block.value} onChange={(e) => updateBlock(block.id, 'value', parseInt(e.target.value))}>
+                                        {Object.entries(SENSOR_LABELS).map(([k, v]) => (<option key={k} value={k}>{v}</option>))}
+                                      </select>
+                                  )}
+                              </React.Fragment>
+                          )}
+
+                          <span className="font-bold text-blue-300">→</span>
+                          
+                          <select className={`border border-slate-600 rounded px-1 lg:px-2 py-1 font-bold outline-none flex-grow
+                                ${block.action === 'LEFT' || block.action === 'RIGHT' ? 'bg-indigo-900 text-indigo-200' : ''}
+                                ${block.action === 'ACCEL' ? 'bg-green-900 text-green-200' : ''}
+                                ${block.action === 'BRAKE' ? 'bg-red-900 text-red-200' : ''}
+                                ${isElse ? 'w-full' : ''}`}
+                            value={block.action} onChange={(e) => updateBlock(block.id, 'action', e.target.value)}>
+                            <option value="LEFT">좌회전</option>
+                            <option value="RIGHT">우회전</option>
+                            <option value="ACCEL">가속</option>
+                            <option value="BRAKE">감속</option>
+                          </select>
+                          <button onClick={() => removeBlock(block.id)} className="text-slate-500 hover:text-red-400 ml-auto opacity-100 lg:opacity-0 group-hover:opacity-100 transition"><Trash2 size={14} className="lg:w-[16px] lg:h-[16px]" /></button>
+                        </div>
+                      );
+                  })}
 
                   <button onClick={addBlock} className="w-full py-2 lg:py-3 border-2 border-dashed border-slate-600 text-slate-400 rounded-lg hover:border-blue-500 hover:text-blue-400 transition flex justify-center items-center gap-2 text-sm lg:text-base">
                     <Plus size={16} className="lg:w-[18px] lg:h-[18px]" /> 로직 블록 추가
@@ -1141,7 +1229,6 @@
                     </div>
                 </div>
 
-                {/* Top Center Horizontal Dashboard (REMOVED) */}
                 {/* Winner Badge */}
                 {gameState === 'finished' && (
                     <div className="absolute top-12 lg:top-6 left-0 right-0 flex justify-center gap-4 px-4 pointer-events-none">
